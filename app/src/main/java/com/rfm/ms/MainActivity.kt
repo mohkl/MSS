@@ -132,7 +132,7 @@ fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit)
         Row(Modifier.fillMaxWidth().background(Purple).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("MS", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(if (iAmDev) "⭐ رقمك (المطور) ✔: $number" else "رقمك: $number",
+                Text(number,
                     color = if (iAmDev) Gold else Color.White.copy(alpha = .9f),
                     fontWeight = if (iAmDev) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.clickable {
@@ -144,7 +144,7 @@ fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit)
             TextButton(onClick = onAbout) { Text("عن المطور", color = Color.White) }
         }
 
-        // بطاقة المطور المميزة
+        // بطاقة المطور المميزة (تظهر للمستخدمين فقط)
         if (!iAmDev) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
                 .background(Color(0xFFFFF3D6), RoundedCornerShape(14.dp))
