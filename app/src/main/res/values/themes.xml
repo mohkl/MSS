@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.MS" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#6C3CE9</item>
+    </style>
+</resources>
