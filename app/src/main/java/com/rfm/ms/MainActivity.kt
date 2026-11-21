@@ -36,7 +36,11 @@ import kotlinx.coroutines.tasks.await
 import kotlin.random.Random
 
 val Purple = Color(0xFF6C3CE9)
+val Gold = Color(0xFFFFB300)
+const val DEV_NUMBER = "+5000000001"
 private val db get() = FirebaseFirestore.getInstance()
+
+fun label(n: String) = if (n == DEV_NUMBER) "⭐ المطور rFM ✔" else n
 
 data class Chat(val id: String, val peer: String, val last: String, val ts: Long)
 data class Msg(val from: String, val text: String, val ts: Long)
@@ -47,7 +51,8 @@ suspend fun ensureNumber(): Pair<String, String> {
     val uid = auth.currentUser?.uid ?: auth.signInAnonymously().await().user!!.uid
     db.collection("users").document(uid).get().await().getString("number")?.let { return uid to it }
     while (true) {
-        val n = "+500" + (1..7).joinToString("") { Random.nextInt(10).toString() }
+        // أول رقم بعد 500 من 1 إلى 9 حتى لا يتعارض مع أرقام المطور المحجوزة (+5000...)
+        val n = "+500" + Random.nextInt(1, 10) + (1..6).joinToString("") { Random.nextInt(10).toString() }
         val ref = db.collection("numbers").document(n)
         val ok = db.runTransaction(Transaction.Function { t ->
             if (t.get(ref).exists()) false else { t.set(ref, mapOf("uid" to uid)); true }
@@ -89,7 +94,6 @@ fun App() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit) {
     val ctx = LocalContext.current
@@ -107,8 +111,7 @@ fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit)
         onDispose { reg.remove() }
     }
 
-    fun start() {
-        val p = peer.trim()
+    fun start(p: String) {
         scope.launch {
             try {
                 val pu = db.collection("numbers").document(p).get().await().getString("uid")
@@ -124,11 +127,14 @@ fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit)
         }
     }
 
+    val iAmDev = number == DEV_NUMBER
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().background(Purple).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("MS", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text("رقمك: $number", color = Color.White.copy(alpha = .9f),
+                Text(if (iAmDev) "⭐ رقمك (المطور) ✔: $number" else "رقمك: $number",
+                    color = if (iAmDev) Gold else Color.White.copy(alpha = .9f),
+                    fontWeight = if (iAmDev) FontWeight.Bold else FontWeight.Normal,
                     modifier = Modifier.clickable {
                         (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                             .setPrimaryClip(ClipData.newPlainText("number", number))
@@ -137,16 +143,32 @@ fun Home(uid: String, number: String, open: (Chat) -> Unit, onAbout: () -> Unit)
             }
             TextButton(onClick = onAbout) { Text("عن المطور", color = Color.White) }
         }
+
+        // بطاقة المطور المميزة
+        if (!iAmDev) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                .background(Color(0xFFFFF3D6), RoundedCornerShape(14.dp))
+                .clickable { start(DEV_NUMBER) }.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("⭐ المطور rFM ✔", fontWeight = FontWeight.Bold, color = Color(0xFF8A5A00))
+                    Text("تواصل مع المطور مباشرة  •  $DEV_NUMBER", color = Color(0xFF8A5A00), fontSize = 12.sp)
+                }
+                Text("💬", fontSize = 22.sp)
+            }
+        }
+
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(peer, { peer = it }, Modifier.weight(1f), singleLine = true,
                 placeholder = { Text("أدخل رقم الشخص مثل +5001234567") })
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { start() }, colors = ButtonDefaults.buttonColors(containerColor = Purple)) { Text("بدء") }
+            Button(onClick = { start(peer.trim()) }, colors = ButtonDefaults.buttonColors(containerColor = Purple)) { Text("بدء") }
         }
         if (chats.isEmpty()) Box(Modifier.fillMaxSize(), Alignment.Center) { Text("لا توجد محادثات بعد", color = Color.Gray) }
         LazyColumn { items(chats) { c ->
             Column(Modifier.fillMaxWidth().clickable { open(c) }.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text(c.peer, fontWeight = FontWeight.Bold)
+                Text(label(c.peer), fontWeight = FontWeight.Bold,
+                    color = if (c.peer == DEV_NUMBER) Color(0xFFB57F00) else Color.Unspecified)
                 Text(c.last, color = Color.Gray, maxLines = 1)
             }
             HorizontalDivider()
@@ -172,16 +194,19 @@ fun ChatScreen(uid: String, number: String, chat: Chat, back: () -> Unit) {
     Column(Modifier.fillMaxSize().imePadding()) {
         Row(Modifier.fillMaxWidth().background(Purple).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = back) { Text("رجوع", color = Color.White) }
-            Text(chat.peer, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(label(chat.peer), color = if (chat.peer == DEV_NUMBER) Gold else Color.White,
+                fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
         LazyColumn(Modifier.weight(1f).padding(horizontal = 8.dp), state = listState) {
             items(msgs) { m ->
                 val mine = m.from == uid
+                val fromDev = (mine && number == DEV_NUMBER) || (!mine && chat.peer == DEV_NUMBER)
+                val bg = if (fromDev) Gold else if (mine) Purple else Color(0xFFEDE7FB)
+                val fg = if (fromDev) Color.Black else if (mine) Color.White else Color.Black
                 Row(Modifier.fillMaxWidth().padding(vertical = 3.dp),
                     horizontalArrangement = if (mine) Arrangement.Start else Arrangement.End) {
-                    Text(m.text, color = if (mine) Color.White else Color.Black,
-                        modifier = Modifier.widthIn(max = 280.dp)
-                            .background(if (mine) Purple else Color(0xFFEDE7FB), RoundedCornerShape(14.dp)).padding(10.dp))
+                    Text(m.text, color = fg,
+                        modifier = Modifier.widthIn(max = 280.dp).background(bg, RoundedCornerShape(14.dp)).padding(10.dp))
                 }
             }
         }
@@ -210,12 +235,13 @@ fun About(back: () -> Unit) {
         Spacer(Modifier.height(16.dp))
         Text("تطبيق MS للمحادثات", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(24.dp))
-        Text("المطور: rFM", fontSize = 18.sp)
+        Text("⭐ المطور: rFM ✔", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB57F00))
+        Text("رقم داخل التطبيق: $DEV_NUMBER", color = Color.Gray)
         Text("+201027814323", color = Color.Gray)
         Spacer(Modifier.height(12.dp))
         Button(colors = ButtonDefaults.buttonColors(containerColor = Purple), onClick = {
             ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/201027814323")))
-        }) { Text("تواصل مع المطور") }
+        }) { Text("تواصل مع المطور على واتساب") }
         TextButton(onClick = back) { Text("رجوع") }
     }
 }
